@@ -9,6 +9,7 @@ import com.example.x_admin.service.IUserService;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import java.util.HashMap;
@@ -30,41 +31,57 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements IU
 
     @Autowired
     private RedisTemplate redisTemplate;
+
+    @Autowired
+    private PasswordEncoder passwordEncoder;
+
     @Override
     public Map<String, Object> login(User user) {
-       LambdaQueryWrapper<User> wrapper = new LambdaQueryWrapper();
+        //根据用户名查询
+        LambdaQueryWrapper<User> wrapper = new LambdaQueryWrapper();
         wrapper.eq(User::getUsername,user.getUsername());
-        wrapper.eq(User::getPassword,user.getPassword());
-        User loginUser= this.baseMapper.selectOne(wrapper);
 
-        if(loginUser!=null) {
-            // 待优化，最终方案jwt
+        User loginUser= this.baseMapper.selectOne(wrapper);
+        //如果不为空并且密码匹配，生成token
+
+        if(loginUser!=null && passwordEncoder.matches(user.getPassword(),loginUser.getPassword())) {
+            // 暂时用UUID，最终方案jwt
             String key="user"+ UUID.randomUUID();
             //存入redis
             loginUser.setPassword(null);
             redisTemplate.opsForValue().set(key,loginUser,30, TimeUnit.MINUTES);
-
-
 
             //返回数据
             Map<String, Object> data = new HashMap<>();
             data.put("token", key);
             return data;
         }
-//        QueryWrapper<User> wrapper = new QueryWrapper<>();
-//        wrapper.eq("username", user.getUsername());
-//        User resultUser= this.baseMapper.selectOne(wrapper);
-//        if (user.getPassword().equals(resultUser.getPassword())){
-//            // 待优化，最终方案jwt
+        return null;
+    }
+//    @Override
+//    public Map<String, Object> login(User user) {
+//        //根据用户名和密码查询
+//       LambdaQueryWrapper<User> wrapper = new LambdaQueryWrapper();
+//        wrapper.eq(User::getUsername,user.getUsername());
+//        wrapper.eq(User::getPassword,user.getPassword());
+//        User loginUser= this.baseMapper.selectOne(wrapper);
+//        //如果不为空，生成token
+//        if(loginUser!=null) {
+//            // 暂时用UUID，最终方案jwt
 //            String key="user"+ UUID.randomUUID();
+//            //存入redis
+//            loginUser.setPassword(null);
+//            redisTemplate.opsForValue().set(key,loginUser,30, TimeUnit.MINUTES);
+//
+//
+//
 //            //返回数据
 //            Map<String, Object> data = new HashMap<>();
 //            data.put("token", key);
 //            return data;
 //        }
-
-        return null;
-    }
+//        return null;
+//    }
 
     @Override
     public Map<String, Object> getUserInfo(String token) {
@@ -83,4 +100,10 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements IU
         }
         return null;
     }
+
+    @Override
+    public void logout(String token) {
+        redisTemplate.delete(token);
+    }
+
 }
